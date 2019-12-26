@@ -1,4 +1,4 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/env bpftrace
 /*
  * xfsdist	Summarize XFS operation latency.
  *		For Linux, uses bpftrace and eBPF.
@@ -39,4 +39,10 @@ kretprobe:xfs_file_fsync
 	@us[@name[tid]] = hist((nsecs - @start[tid]) / 1000);
 	delete(@start[tid]);
 	delete(@name[tid]);
+}
+
+END
+{
+	clear(@start);
+	clear(@name);
 }

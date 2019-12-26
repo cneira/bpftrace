@@ -1,17 +1,46 @@
 #pragma once
 
-#include "struct.h"
+#include <clang-c/Index.h>
+#include "bpftrace.h"
+
+#define ASM_GOTO_WORKAROUND_H "asm_goto_workaround.h"
 
 namespace bpftrace {
 
 namespace ast { class Program; }
 
-using StructMap = std::map<std::string, Struct>;
-
 class ClangParser
 {
 public:
-  void parse(ast::Program *program, StructMap &structs);
+  bool parse(ast::Program *program, BPFtrace &bpftrace, std::vector<std::string> extra_flags = {});
+private:
+  bool visit_children(CXCursor &cursor, BPFtrace &bpftrace);
+  bool parse_btf_definitions(BPFtrace &bpftrace);
+
+  class ClangParserHandler
+  {
+  public:
+    ClangParserHandler();
+
+    ~ClangParserHandler();
+
+    CXTranslationUnit get_translation_unit();
+
+    CXErrorCode parse_translation_unit(const char *source_filename,
+                            const char *const *command_line_args,
+                            int num_command_line_args,
+                            struct CXUnsavedFile *unsaved_files,
+                            unsigned num_unsaved_files,
+                            unsigned options);
+
+    bool check_diagnostics(const std::string& input);
+
+    CXCursor get_translation_unit_cursor();
+
+  private:
+    CXIndex index;
+    CXTranslationUnit translation_unit;
+  };
 };
 
 } // namespace bpftrace

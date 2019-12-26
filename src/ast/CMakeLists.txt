@@ -4,16 +4,23 @@ add_library(ast
   irbuilderbpf.cpp
   printer.cpp
   semantic_analyser.cpp
+  field_analyser.cpp
 )
+
+if(HAVE_GET_CURRENT_CGROUP_ID)
+  target_compile_definitions(ast PRIVATE HAVE_GET_CURRENT_CGROUP_ID)
+endif(HAVE_GET_CURRENT_CGROUP_ID)
+
+if(HAVE_SEND_SIGNAL)
+  target_compile_definitions(ast PRIVATE HAVE_SEND_SIGNAL)
+endif(HAVE_SEND_SIGNAL)
 
 target_include_directories(ast PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(ast PUBLIC ${CMAKE_SOURCE_DIR}/src/ast)
 target_include_directories(ast PUBLIC ${CMAKE_BINARY_DIR})
 target_link_libraries(ast arch)
 
-add_dependencies(ast bcc-build parser)
-ExternalProject_Get_Property(bcc source_dir)
-target_include_directories(ast PUBLIC ${source_dir}/src/cc)
+add_dependencies(ast parser)
 
 if (STATIC_LINKING)
   set(clang_libs
@@ -36,5 +43,13 @@ if (STATIC_LINKING)
   target_link_libraries(ast ${clang_libs})
   target_link_libraries(ast ${llvm_libs})
 else()
-  target_link_libraries(ast LLVM libclang)
+  find_library(found_LLVM LLVM HINTS ${LLVM_LIBRARY_DIRS})
+  if(found_LLVM)
+    target_link_libraries(ast LLVM)
+  else()
+    llvm_map_components_to_libnames(_llvm_libs bpfcodegen ipo irreader mcjit orcjit ${LLVM_TARGETS_TO_BUILD})
+    llvm_expand_dependencies(llvm_libs ${_llvm_libs})
+    target_link_libraries(ast ${llvm_libs})
+  endif()
+  target_link_libraries(ast libclang)
 endif()

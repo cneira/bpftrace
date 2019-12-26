@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "parser.tab.hh"
+#include <iostream>
 
 namespace bpftrace {
 namespace ast {
@@ -12,7 +13,19 @@ void String::accept(Visitor &v) {
   v.visit(*this);
 }
 
+void StackMode::accept(Visitor &v) {
+  v.visit(*this);
+}
+
 void Builtin::accept(Visitor &v) {
+  v.visit(*this);
+}
+
+void Identifier::accept(Visitor &v) {
+  v.visit(*this);
+}
+
+void PositionalParameter::accept(Visitor &v) {
   v.visit(*this);
 }
 
@@ -41,6 +54,10 @@ void Ternary::accept(Visitor &v) {
 }
 
 void FieldAccess::accept(Visitor &v) {
+  v.visit(*this);
+}
+
+void ArrayAccess::accept(Visitor &v) {
   v.visit(*this);
 }
 
@@ -105,7 +122,9 @@ std::string opstr(Binop &binop)
     case bpftrace::Parser::token::BAND:  return "&";
     case bpftrace::Parser::token::BOR:   return "|";
     case bpftrace::Parser::token::BXOR:  return "^";
-    default: abort();
+    default:
+      std::cerr << "unknown binary operator" << std::endl;
+      abort();
   }
 }
 
@@ -115,8 +134,12 @@ std::string opstr(Unop &unop)
     case bpftrace::Parser::token::LNOT: return "!";
     case bpftrace::Parser::token::BNOT: return "~";
     case bpftrace::Parser::token::MINUS: return "-";
-    case bpftrace::Parser::token::MUL:  return "dereference";
-    default: abort();
+    case bpftrace::Parser::token::MUL: return "dereference";
+    case bpftrace::Parser::token::INCREMENT: return "++";
+    case bpftrace::Parser::token::DECREMENT: return "--";
+    default:
+      std::cerr << "unknown unary operator" << std::endl;
+      abort();
   }
 }
 
@@ -125,8 +148,16 @@ std::string AttachPoint::name(const std::string &attach_point) const
   std::string n = provider;
   if (target != "")
     n += ":" + target;
+  if (ns != "")
+    n += ":" + ns;
   if (attach_point != "")
+  {
     n += ":" + attach_point;
+    if (func_offset != 0)
+      n += "+" + std::to_string(func_offset);
+  }
+  if (address != 0)
+    n += ":" + std::to_string(address);
   if (freq != 0)
     n += ":" + std::to_string(freq);
   return n;
@@ -143,19 +174,28 @@ void AttachPoint::set_index(std::string name, int index) {
 
 std::string Probe::name() const
 {
-  std::string n = "";
-  for (auto attach_point : *attach_points)
+  std::string n;
+  for (auto &attach_point : *attach_points)
   {
+    if (!n.empty())
+      n += ',';
     n += attach_point->provider;
     if (attach_point->target != "")
       n += ":" + attach_point->target;
+    if (attach_point->ns != "")
+      n += ":" + attach_point->ns;
     if (attach_point->func != "")
+    {
       n += ":" + attach_point->func;
+      if (attach_point->func_offset != 0)
+        n += "+" + std::to_string(attach_point->func_offset);
+    }
+    if (attach_point->address != 0)
+      n += ":" + std::to_string(attach_point->address);
     if (attach_point->freq != 0)
       n += ":" + std::to_string(attach_point->freq);
-    n += ",";
   }
-  return n.substr(0, n.size()-1);
+  return n;
 }
 
 int Probe::index() {

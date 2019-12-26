@@ -35,16 +35,21 @@ public:
   AllocaInst *CreateAllocaBPF(const SizedType &stype, llvm::Value *arraysize, const std::string &name="");
   AllocaInst *CreateAllocaBPF(int bytes, const std::string &name="");
   llvm::Type *GetType(const SizedType &stype);
+  llvm::ConstantInt *GetIntSameSize(uint64_t C, llvm::Value *expr);
   CallInst   *CreateBpfPseudoCall(int mapfd);
   CallInst   *CreateBpfPseudoCall(Map &map);
   Value      *CreateMapLookupElem(Map &map, AllocaInst *key);
   void        CreateMapUpdateElem(Map &map, AllocaInst *key, Value *val);
   void        CreateMapDeleteElem(Map &map, AllocaInst *key);
   void        CreateProbeRead(AllocaInst *dst, size_t size, Value *src);
+  CallInst   *CreateProbeReadStr(AllocaInst *dst, llvm::Value *size, Value *src);
   CallInst   *CreateProbeReadStr(AllocaInst *dst, size_t size, Value *src);
   CallInst   *CreateProbeReadStr(Value *dst, size_t size, Value *src);
-  Value      *CreateUSDTReadArgument(Value *ctx, AttachPoint *attach_point, int arg_name, Builtin &builtin);
+  Value      *CreateUSDTReadArgument(Value *ctx, AttachPoint *attach_point, int arg_name, Builtin &builtin, int pid);
   Value      *CreateStrcmp(Value* val, std::string str, bool inverse=false);
+  Value      *CreateStrcmp(Value* val1, Value* val2, bool inverse=false);
+  Value      *CreateStrncmp(Value* val, std::string str, uint64_t n, bool inverse=false);
+  Value      *CreateStrncmp(Value* val1, Value* val2, uint64_t n, bool inverse=false);
   CallInst   *CreateGetNs();
   CallInst   *CreateGetPidTgid();
   CallInst   *CreateGetCurrentCgroupId();
@@ -52,10 +57,11 @@ public:
   CallInst   *CreateGetCpuId();
   CallInst   *CreateGetCurrentTask();
   CallInst   *CreateGetRandom();
-  CallInst   *CreateGetStackId(Value *ctx, bool ustack);
+  CallInst   *CreateGetStackId(Value *ctx, bool ustack, StackType stack_type);
   CallInst   *CreateGetJoinMap(Value *ctx);
   void        CreateGetCurrentComm(AllocaInst *buf, size_t size);
   void        CreatePerfEventOutput(Value *ctx, Value *data, size_t size);
+  void        CreateSignal(Value *sig);
 
 private:
   Module &module_;

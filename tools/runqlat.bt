@@ -1,4 +1,4 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/env bpftrace
 /*
  * runqlat.bt	CPU scheduler run queue latency as a histogram.
  *		For Linux, uses bpftrace, eBPF.
@@ -18,11 +18,7 @@ BEGIN
 	printf("Tracing CPU scheduler... Hit Ctrl-C to end.\n");
 }
 
-tracepoint:sched:sched_wakeup
-{
-	@qtime[args->pid] = nsecs;
-}
-
+tracepoint:sched:sched_wakeup,
 tracepoint:sched:sched_wakeup_new
 {
 	@qtime[args->pid] = nsecs;
@@ -30,15 +26,14 @@ tracepoint:sched:sched_wakeup_new
 
 tracepoint:sched:sched_switch
 {
-	$TASK_RUNNING = 0;	// from linux/sched.h, workaround for #153
-	if (args->prev_state == $TASK_RUNNING) {
+	if (args->prev_state == TASK_RUNNING) {
 		@qtime[args->prev_pid] = nsecs;
-	};
+	}
 
 	$ns = @qtime[args->next_pid];
 	if ($ns) {
 		@usecs = hist((nsecs - $ns) / 1000);
-	};
+	}
 	delete(@qtime[args->next_pid]);
 }
 

@@ -18,37 +18,37 @@ size_t MapKey::size() const
 
 std::string MapKey::argument_type_list() const
 {
-  size_t n = args_.size();
-  if (n == 0)
-    return "[]";
-
   std::ostringstream list;
   list << "[";
-  for (size_t i = 0; i < n-1; i++)
-    list << args_.at(i) << ", ";
-  list << args_.at(n-1) << "]";
+  for (size_t i = 0; i < args_.size(); i++)
+  {
+    if (i)
+      list << ", ";
+    list << args_[i];
+  }
+  list << "]";
   return list.str();
 }
 
-std::string MapKey::argument_value_list(BPFtrace &bpftrace,
+std::vector<std::string> MapKey::argument_value_list(BPFtrace &bpftrace,
     const std::vector<uint8_t> &data) const
 {
-  size_t n = args_.size();
-  if (n == 0)
-    return "";
-
-  std::ostringstream list;
-  list << "[";
+  std::vector<std::string> list;
   int offset = 0;
-  for (size_t i = 0; i < n-1; i++)
+  for (const SizedType &arg : args_)
   {
-    const SizedType &arg = args_.at(i);
-    list << argument_value(bpftrace, arg, &data.at(offset)) << ", ";
+    list.push_back(argument_value(bpftrace, arg, &data[offset]));
     offset += arg.size;
   }
-  const SizedType &arg = args_.at(n-1);
-  list << argument_value(bpftrace, arg, &data.at(offset)) << "]";
-  return list.str();
+  return list;
+}
+
+std::string MapKey::argument_value_list_str(BPFtrace &bpftrace,
+    const std::vector<uint8_t> &data) const
+{
+  if (args_.empty())
+    return "";
+  return "[" + str_join(argument_value_list(bpftrace, data), ", ") + "]";
 }
 
 std::string MapKey::argument_value(BPFtrace &bpftrace,
@@ -56,30 +56,49 @@ std::string MapKey::argument_value(BPFtrace &bpftrace,
     const void *data)
 {
   auto arg_data = static_cast<const uint8_t*>(data);
+  std::ostringstream ptr;
   switch (arg.type)
   {
     case Type::integer:
       switch (arg.size)
       {
-        case 8:
-          return std::to_string(*(int64_t*)data);
+        case 1:
+          return std::to_string(*(const int8_t*)data);
+        case 2:
+          return std::to_string(*(const int16_t*)data);
         case 4:
-          return std::to_string(*(int32_t*)data);
+          return std::to_string(*(const int32_t*)data);
+        case 8:
+          return std::to_string(*(const int64_t*)data);
+        default:
+          break;
       }
-    case Type::stack:
-      return bpftrace.get_stack(*(uint64_t*)data, false);
+      break;
+    case Type::kstack:
+      return bpftrace.get_stack(*(const uint64_t*)data, false, arg.stack_type, 4);
     case Type::ustack:
-      return bpftrace.get_stack(*(uint64_t*)data, true);
-    case Type::sym:
-      return bpftrace.resolve_sym(*(uint64_t*)data);
+      return bpftrace.get_stack(*(const uint64_t*)data, true, arg.stack_type, 4);
+    case Type::ksym:
+      return bpftrace.resolve_ksym(*(const uint64_t*)data);
     case Type::usym:
-      return bpftrace.resolve_usym(*(uint64_t*)data, *(uint64_t*)(arg_data + 8));
+      return bpftrace.resolve_usym(*(const uint64_t*)data, *(const uint64_t*)(arg_data + 8));
+    case Type::inet:
+      return bpftrace.resolve_inet(*(const int64_t*)data, (const uint8_t*)(arg_data + 8));
     case Type::username:
-      return bpftrace.resolve_uid(*(uint64_t*)data);
-    case Type::name:
-      return bpftrace.name_ids_[*(uint64_t*)data];
+      return bpftrace.resolve_uid(*(const uint64_t*)data);
+    case Type::probe:
+      return bpftrace.probe_ids_[*(const uint64_t*)data];
     case Type::string:
-      return std::string((char*)data);
+      return std::string((const char*)data);
+    case Type::cast:
+      if (arg.is_pointer) {
+        // use case: show me these pointer values
+        ptr << "0x" << std::hex << *(const int64_t*)data;
+        return ptr.str();
+      }
+      // fall through
+    default:
+      std::cerr << "invalid mapkey argument type" << std::endl;
   }
   abort();
 }

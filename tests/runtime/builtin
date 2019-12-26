@@ -1,0 +1,146 @@
+NAME pid
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", pid); exit(); }'
+EXPECT SUCCESS pid [0-9][0-9]*
+TIMEOUT 5
+
+NAME tid
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", tid); exit(); }'
+EXPECT SUCCESS tid [0-9][0-9]*
+TIMEOUT 5
+
+NAME uid
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", uid); exit(); }'
+EXPECT SUCCESS uid [0-9][0-9]*
+TIMEOUT 5
+
+NAME gid
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", gid); exit(); }'
+EXPECT SUCCESS gid [0-9][0-9]*
+TIMEOUT 5
+
+NAME nsecs
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", nsecs); exit(); }'
+EXPECT SUCCESS nsecs -?[0-9][0-9]*
+TIMEOUT 5
+
+NAME elapsed
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", elapsed); exit(); }'
+EXPECT SUCCESS elapsed -?[0-9][0-9]*
+TIMEOUT 5
+
+NAME cpu
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", cpu); exit(); }'
+EXPECT SUCCESS cpu -?[0-9][0-9]*
+TIMEOUT 5
+
+NAME comm
+RUN bpftrace -v -e 'k:vfs_read { printf("SUCCESS '$test' %s\n", comm); exit(); }'
+EXPECT SUCCESS comm .*
+TIMEOUT 5
+
+NAME stack
+RUN bpftrace -v -e 'k:vfs_read{ printf("SUCCESS '$test' %s\n", stack); exit(); }'
+EXPECT SUCCESS stack
+TIMEOUT 5
+
+NAME kstack
+RUN bpftrace -v -e 'k:vfs_read{ printf("SUCCESS '$test' %s\n", kstack); exit(); }'
+EXPECT SUCCESS kstack
+TIMEOUT 5
+
+NAME ustack
+RUN bpftrace -v -e 'k:vfs_read { printf("SUCCESS '$test' %s\n", ustack); exit(); }'
+EXPECT SUCCESS ustack
+TIMEOUT 5
+
+NAME arg
+RUN bpftrace -v -e 'k:vfs_read { printf("SUCCESS '$test' %d\n", arg0); exit(); }'
+EXPECT SUCCESS arg -?[0-9][0-9]*
+TIMEOUT 5
+
+NAME sarg
+RUN bpftrace -v -e 'uprobe:./testprogs/stack_args:too_many_args { printf("SUCCESS '$test' %d %d\n", sarg0, sarg1); exit(); }'
+EXPECT SUCCESS sarg 32 64
+TIMEOUT 5
+AFTER ./testprogs/stack_args
+
+NAME retval
+RUN bpftrace -v -e 'kretprobe:vfs_read { printf("SUCCESS '$test' %d\n", retval); exit(); }'
+EXPECT SUCCESS retval .*
+TIMEOUT 5
+
+NAME func
+RUN bpftrace -v -e 'k:vfs_read { printf("SUCCESS '$test' %s\n", func); exit(); }'
+EXPECT SUCCESS func .*
+TIMEOUT 5
+
+NAME func_uprobe
+RUN bpftrace -v -e 'uprobe:./testprogs/uprobe_negative_retval:function1 { printf("SUCCESS %s\n", func); exit(); }'
+EXPECT SUCCESS .*
+AFTER ./testprogs/uprobe_negative_retval
+TIMEOUT 5
+
+NAME username
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %s\n", username); exit(); }'
+EXPECT SUCCESS username .*
+TIMEOUT 5
+
+NAME probe
+RUN bpftrace -v -e 'k:do_nanosleep { printf("SUCCESS '$test' %s\n", probe); exit(); }'
+EXPECT SUCCESS probe kprobe:do_nanosleep
+TIMEOUT 5
+AFTER sleep 0.1
+
+NAME begin probe
+RUN bpftrace -v -e 'BEGIN { printf("%s", probe);exit(); } END{printf("-%s\n", probe); }'
+EXPECT ^BEGIN-END$
+TIMEOUT 5
+AFTER sleep 0.1
+
+NAME curtask
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", curtask); exit(); }'
+EXPECT SUCCESS curtask -?[0-9][0-9]*
+TIMEOUT 5
+
+NAME rand
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", rand); exit(); }'
+EXPECT SUCCESS rand -?[0-9][0-9]*
+TIMEOUT 5
+
+NAME cgroup
+RUN bpftrace -v -e 'i:ms:1 { printf("SUCCESS '$test' %d\n", cgroup); exit(); }'
+EXPECT SUCCESS cgroup -?[0-9][0-9]*
+TIMEOUT 5
+MIN_KERNEL 4.18
+
+NAME cat
+RUN bpftrace -e 'i:ms:1 { cat("/proc/loadavg"); exit(); }'
+EXPECT ^([0-9]+\.[0-9]+ ?)+.*$
+TIMEOUT 5
+
+NAME cat limited output
+ENV BPFTRACE_CAT_BYTES_MAX=1
+RUN bpftrace -e 'i:ms:1 { cat("/proc/loadavg"); exit(); }'
+EXPECT ^[0-9]$
+TIMEOUT 5
+
+NAME cat format str
+RUN bpftrace -e 'i:ms:1 { $s = "loadavg"; cat("/proc/%s", $s); exit(); }'
+EXPECT ^([0-9]+\.[0-9]+ ?)+.*$
+TIMEOUT 5
+
+NAME log size too small
+ENV BPFTRACE_LOG_SIZE=1
+RUN bpftrace -ve 'BEGIN { if (str($1) == str($2)) { printf("%s\n", str($1)); exit() } }' "hello" "hello"
+EXPECT ^Error loading program: BEGIN
+TIMEOUT 5
+
+NAME increase log size
+RUN bpftrace -ve 'BEGIN { if (str($1) == str($2)) { printf("%s\n", str($1)); exit() } }' "hello" "hello"
+EXPECT ^Attaching 1 probe
+TIMEOUT 5
+
+NAME cat "no such file"
+RUN bpftrace -e 'i:ms:1 { cat("/does/not/exist/file"); exit(); }'
+EXPECT ^Error opening file '/does/not/exist/file': No such file or directory$
+TIMEOUT 5

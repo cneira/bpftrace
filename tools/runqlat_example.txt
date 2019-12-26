@@ -5,7 +5,7 @@ This traces time spent waiting in the CPU scheduler for a turn on-CPU. This
 metric is often called run queue latency, or scheduler latency. This tool shows
 this latency as a power-of-2 histogram in nanoseconds. For example:
 
-# runqlat.bt
+# ./runqlat.bt
 Attaching 5 probes...
 Tracing CPU scheduler... Hit Ctrl-C to end.
 ^C
@@ -13,7 +13,8 @@ Tracing CPU scheduler... Hit Ctrl-C to end.
 
 
 @usecs:
-[0, 1]                12 |@@                                                  |
+[0]                    1 |                                                    |
+[1]                   11 |@@                                                  |
 [2, 4)                16 |@@@                                                 |
 [4, 8)                43 |@@@@@@@@@@                                          |
 [8, 16)              134 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@                     |
@@ -49,7 +50,7 @@ the CPU caches should be hotter.
 I'll now add a single-threaded CPU bound workload to this system, and bind
 it on one CPU:
 
-# runqlat.bt
+# ./runqlat.bt
 Attaching 5 probes...
 Tracing CPU scheduler... Hit Ctrl-C to end.
 ^C
@@ -57,7 +58,7 @@ Tracing CPU scheduler... Hit Ctrl-C to end.
 
 
 @usecs:
-[0, 1]                 6 |@@@                                                 |
+[1]                    6 |@@@                                                 |
 [2, 4)                26 |@@@@@@@@@@@@@                                       |
 [4, 8)                97 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@|
 [8, 16)               72 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@              |
@@ -85,7 +86,7 @@ That didn't make much difference.
 Now I'll add a second single-threaded CPU workload, and bind it to the same
 CPU, causing contention:
 
-# runqlat.bt
+# ./runqlat.bt
 Attaching 5 probes...
 Tracing CPU scheduler... Hit Ctrl-C to end.
 ^C
@@ -93,7 +94,8 @@ Tracing CPU scheduler... Hit Ctrl-C to end.
 
 
 @usecs:
-[0, 1]                 9 |@@@                                                 |
+[0]                    1 |                                                    |
+[1]                    8 |@@@                                                 |
 [2, 4)                28 |@@@@@@@@@@@@                                        |
 [4, 8)                95 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@           |
 [8, 16)              120 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@|
@@ -119,7 +121,7 @@ wait its turn on the one CPU.
 
 Now I'l run 10 CPU-bound throuds on one CPU:
 
-# runqlat.bt
+# ./runqlat.bt
 Attaching 5 probes...
 Tracing CPU scheduler... Hit Ctrl-C to end.
 ^C
@@ -127,7 +129,8 @@ Tracing CPU scheduler... Hit Ctrl-C to end.
 
 
 @usecs:
-[0, 1]                12 |@                                                   |
+[0]                    2 |                                                    |
+[1]                   10 |@                                                   |
 [2, 4)                38 |@@@@                                                |
 [4, 8)                63 |@@@@@@                                              |
 [8, 16)              106 |@@@@@@@@@@@                                         |

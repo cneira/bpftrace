@@ -67,8 +67,8 @@ public:
   ModuleHandle addModule(std::unique_ptr<Module> M) {
     // We don't actually care about resolving symbols from other modules
     auto Resolver = createLambdaResolver(
-        [](const std::string &Name) { return JITSymbol(nullptr); },
-        [](const std::string &Name) { return JITSymbol(nullptr); });
+        [](const std::string &) { return JITSymbol(nullptr); },
+        [](const std::string &) { return JITSymbol(nullptr); });
 
     return cantFail(CompileLayer.addModule(std::move(M), std::move(Resolver)));
   }
@@ -80,8 +80,13 @@ private:
   ExecutionSession ES;
   std::unique_ptr<TargetMachine> TM;
   std::shared_ptr<SymbolResolver> Resolver;
+#if LLVM_VERSION_MAJOR >= 8
+  LegacyRTDyldObjectLinkingLayer ObjectLayer;
+  LegacyIRCompileLayer<decltype(ObjectLayer), SimpleCompiler> CompileLayer;
+#else
   RTDyldObjectLinkingLayer ObjectLayer;
   IRCompileLayer<decltype(ObjectLayer), SimpleCompiler> CompileLayer;
+#endif
 
 public:
   std::map<std::string, std::tuple<uint8_t *, uintptr_t>> sections_;
@@ -89,14 +94,18 @@ public:
   BpfOrc(TargetMachine *TM_)
     : TM(TM_),
       Resolver(createLegacyLookupResolver(ES,
-        [](const std::string &Name) -> JITSymbol { return nullptr; },
+        [](const std::string &Name __attribute__((unused))) -> JITSymbol { return nullptr; },
         [](Error Err) { cantFail(std::move(Err), "lookup failed"); })),
+#if LLVM_VERSION_MAJOR >= 8
+      ObjectLayer(ES, [this](VModuleKey) { return LegacyRTDyldObjectLinkingLayer::Resources{std::make_shared<MemoryManager>(sections_), Resolver}; }),
+#else
       ObjectLayer(ES, [this](VModuleKey) { return RTDyldObjectLinkingLayer::Resources{std::make_shared<MemoryManager>(sections_), Resolver}; }),
+#endif
       CompileLayer(ObjectLayer, SimpleCompiler(*TM)) {}
 
   void compileModule(std::unique_ptr<Module> M) {
     auto K = addModule(move(M));
-    CompileLayer.emitAndFinalize(K);
+    cantFail(CompileLayer.emitAndFinalize(K));
   }
 
   VModuleKey addModule(std::unique_ptr<Module> M) {

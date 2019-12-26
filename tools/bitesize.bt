@@ -1,4 +1,4 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/env bpftrace
 /*
  * bitesize	Show disk I/O size as a histogram.
  *		For Linux, uses bpftrace and eBPF.
@@ -16,12 +16,11 @@
 BEGIN
 {
 	printf("Tracing block device I/O... Hit Ctrl-C to end.\n");
-
 }
 
 tracepoint:block:block_rq_issue
 {
-	@[comm] = hist(args->bytes);
+	@[args->comm] = hist(args->bytes);
 }
 
 END

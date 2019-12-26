@@ -10,9 +10,18 @@ namespace parser {
 
 using Printer = ast::Printer;
 
+void test_parse_failure(const std::string &input)
+{
+  BPFtrace bpftrace;
+  std::stringstream out;
+  Driver driver(bpftrace, out);
+  ASSERT_EQ(driver.parse_str(input), 1);
+}
+
 void test(const std::string &input, const std::string &output)
 {
-  Driver driver;
+  BPFtrace bpftrace;
+  Driver driver(bpftrace);
   ASSERT_EQ(driver.parse_str(input), 0);
 
   std::ostringstream out;
@@ -30,18 +39,36 @@ TEST(Parser, builtin_variables)
   test("kprobe:f { username }", "Program\n kprobe:f\n  builtin: username\n");
   test("kprobe:f { gid }", "Program\n kprobe:f\n  builtin: gid\n");
   test("kprobe:f { nsecs }", "Program\n kprobe:f\n  builtin: nsecs\n");
+  test("kprobe:f { elapsed }", "Program\n kprobe:f\n  builtin: elapsed\n");
   test("kprobe:f { cpu }", "Program\n kprobe:f\n  builtin: cpu\n");
   test("kprobe:f { curtask }", "Program\n kprobe:f\n  builtin: curtask\n");
   test("kprobe:f { rand }", "Program\n kprobe:f\n  builtin: rand\n");
   test("kprobe:f { ctx }", "Program\n kprobe:f\n  builtin: ctx\n");
   test("kprobe:f { comm }", "Program\n kprobe:f\n  builtin: comm\n");
-  test("kprobe:f { stack }", "Program\n kprobe:f\n  builtin: stack\n");
+  test("kprobe:f { stack }", "Program\n kprobe:f\n  builtin: kstack\n");
+  test("kprobe:f { kstack }", "Program\n kprobe:f\n  builtin: kstack\n");
   test("kprobe:f { ustack }", "Program\n kprobe:f\n  builtin: ustack\n");
   test("kprobe:f { arg0 }", "Program\n kprobe:f\n  builtin: arg0\n");
+  test("kprobe:f { sarg0 }", "Program\n kprobe:f\n  builtin: sarg0\n");
   test("kprobe:f { retval }", "Program\n kprobe:f\n  builtin: retval\n");
   test("kprobe:f { func }", "Program\n kprobe:f\n  builtin: func\n");
-  test("kprobe:f { name }", "Program\n kprobe:f\n  builtin: name\n");
+  test("kprobe:f { probe }", "Program\n kprobe:f\n  builtin: probe\n");
   test("kprobe:f { args }", "Program\n kprobe:f\n  builtin: args\n");
+}
+
+TEST(Parser, positional_param)
+{
+  test("kprobe:f { $1 }", "Program\n kprobe:f\n  param: $1\n");
+}
+
+TEST(Parser, positional_param_count)
+{
+  test("kprobe:f { $# }", "Program\n kprobe:f\n  param: $#\n");
+}
+
+TEST(Parser, comment)
+{
+  test("kprobe:f { /*** ***/0; }", "Program\n kprobe:f\n  int: 0\n");
 }
 
 TEST(Parser, map_assign)
@@ -132,8 +159,205 @@ TEST(Parser, variable_assign)
       " kprobe:sys_open\n"
       "  =\n"
       "   variable: $x\n"
-      "   -\n"
-      "    int: 1\n");
+      "   int: -1\n");
+}
+
+TEST(semantic_analyser, compound_variable_assignments)
+{
+  test("kprobe:f { $a = 0; $a <<= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   <<\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a >>= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   >>\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a += 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   +\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a -= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   -\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a *= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   *\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a /= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   /\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a %= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   %\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a &= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   &\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a |= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   |\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+  test("kprobe:f { $a = 0; $a ^= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   int: 0\n"
+       "  =\n"
+       "   variable: $a\n"
+       "   ^\n"
+       "    variable: $a\n"
+       "    int: 1\n");
+}
+
+TEST(Parser, compound_map_assignments)
+{
+  test("kprobe:f { @a <<= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   <<\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a >>= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   >>\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a += 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   +\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a -= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   -\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a *= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   *\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a /= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   /\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a %= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   %\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a &= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   &\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a |= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   |\n"
+       "    map: @a\n"
+       "    int: 1\n");
+  test("kprobe:f { @a ^= 1 }",
+       "Program\n"
+       " kprobe:f\n"
+       "  =\n"
+       "   map: @a\n"
+       "   ^\n"
+       "    map: @a\n"
+       "    int: 1\n");
 }
 
 TEST(Parser, integer_sizes)
@@ -249,6 +473,54 @@ TEST(Parser, expressions)
       "  int: 1\n");
 }
 
+TEST(Parser, variable_post_increment_decrement)
+{
+  test("kprobe:sys_open { $x++; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  variable: $x\n"
+      "   ++\n");
+  test("kprobe:sys_open { ++$x; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  ++\n"
+      "   variable: $x\n");
+  test("kprobe:sys_open { $x--; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  variable: $x\n"
+      "   --\n");
+  test("kprobe:sys_open { --$x; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  --\n"
+      "   variable: $x\n");
+}
+
+TEST(Parser, map_increment_decrement)
+{
+  test("kprobe:sys_open { @x++; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  map: @x\n"
+      "   ++\n");
+  test("kprobe:sys_open { ++@x; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  ++\n"
+      "   map: @x\n");
+  test("kprobe:sys_open { @x--; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  map: @x\n"
+      "   --\n");
+  test("kprobe:sys_open { --@x; }",
+      "Program\n"
+      " kprobe:sys_open\n"
+      "  --\n"
+      "   map: @x\n");
+}
+
 TEST(Parser, bit_shifting)
 {
   test("kprobe:do_nanosleep { @x = 1 << 10 }",
@@ -312,6 +584,32 @@ TEST(Parser, if_block)
        "     builtin: pid\n");
 }
 
+TEST(Parser, if_stmt_if)
+{
+  test("kprobe:sys_open { if (pid > 10000) { printf(\"%d is high\\n\", pid); } @pid = pid; if (pid < 1000) { printf(\"%d is low\\n\", pid); } }",
+       "Program\n"
+       " kprobe:sys_open\n"
+       "  if\n"
+       "   >\n"
+       "    builtin: pid\n"
+       "    int: 10000\n"
+       "   then\n"
+       "    call: printf\n"
+       "     string: %d is high\\n\n"
+       "     builtin: pid\n"
+       "  =\n"
+       "   map: @pid\n"
+       "   builtin: pid\n"
+       "  if\n"
+       "   <\n"
+       "    builtin: pid\n"
+       "    int: 1000\n"
+       "   then\n"
+       "    call: printf\n"
+       "     string: %d is low\\n\n"
+       "     builtin: pid\n");
+}
+
 TEST(Parser, if_block_variable)
 {
   test("kprobe:sys_open { if (pid > 10000) { $s = 10; } }",
@@ -329,7 +627,7 @@ TEST(Parser, if_block_variable)
 
 TEST(Parser, if_else)
 {
-  test("kprobe:sys_open { if (pid > 10000) { $s = \"a\"; } else { $s= \"b\"; }; printf(\"%d is high\\n\", pid, $s); }",
+  test("kprobe:sys_open { if (pid > 10000) { $s = \"a\"; } else { $s= \"b\"; } printf(\"%d is high\\n\", pid, $s); }",
        "Program\n"
        " kprobe:sys_open\n"
        "  if\n"
@@ -424,10 +722,21 @@ TEST(Parser, call)
 
 TEST(Parser, call_unknown_function)
 {
-  test("kprobe:sys_open { myfunc() }",
-      "Program\n"
-      " kprobe:sys_open\n"
-      "  call: myfunc\n");
+  test_parse_failure("kprobe:sys_open { myfunc() }");
+  test_parse_failure("k:f { probe(); }");
+}
+
+TEST(Parser, call_builtin)
+{
+  // Builtins should not be usable as function
+  test_parse_failure("k:f { nsecs(); }");
+  test_parse_failure("k:f { nsecs  (); }");
+  test_parse_failure("k:f { nsecs(\"abc\"); }");
+  test_parse_failure("k:f { nsecs(123); }");
+
+  test_parse_failure("k:f { probe(\"blah\"); }");
+  test_parse_failure("k:f { probe(); }");
+  test_parse_failure("k:f { probe(123); }");
 }
 
 TEST(Parser, call_kaddr)
@@ -461,6 +770,10 @@ TEST(Parser, uprobe)
       "Program\n"
       " uprobe:/my/go/program:pkg.func\u2C51\n"
       "  int: 1\n");
+  test ("uprobe:/with#hash:asdf { 1 }",
+      "Program\n"
+      " uprobe:/with#hash:asdf\n"
+      "  int: 1\n");
 }
 
 TEST(Parser, usdt)
@@ -471,12 +784,32 @@ TEST(Parser, usdt)
       "  int: 1\n");
 }
 
+TEST(Parser, usdt_namespaced_probe)
+{
+  test("usdt:/my/program:namespace:probe { 1; }",
+      "Program\n"
+      " usdt:/my/program:namespace:probe\n"
+      "  int: 1\n");
+  test("usdt:/my/program*:namespace:probe { 1; }",
+      "Program\n"
+      " usdt:/my/program*:namespace:probe\n"
+      "  int: 1\n");
+  test("usdt:/my/*program:namespace:probe { 1; }",
+      "Program\n"
+      " usdt:/my/*program:namespace:probe\n"
+      "  int: 1\n");
+  test("usdt:*my/program*:namespace:probe { 1; }",
+      "Program\n"
+      " usdt:*my/program*:namespace:probe\n"
+      "  int: 1\n");
+}
+
 TEST(Parser, escape_chars)
 {
-  test("kprobe:sys_open { \"newline\\nand tab\\tbackslash\\\\quote\\\"here\" }",
+  test("kprobe:sys_open { \"newline\\nand tab\\tcr\\rbackslash\\\\quote\\\"here oct\\1009hex\\x309\" }",
       "Program\n"
       " kprobe:sys_open\n"
-      "  string: newline\\nand tab\\tbackslash\\\\quote\\\"here\n");
+      "  string: newline\\nand tab\\tcr\\rbackslash\\\\quote\\\"here oct@9hex09\n");
 }
 
 TEST(Parser, begin_probe)
@@ -579,6 +912,80 @@ TEST(Parser, wildcard_attach_points)
       "   map: @x\n"
       "   dereference\n"
       "    builtin: arg0\n");
+}
+
+TEST(Parser, wildcard_path)
+{
+  test("uprobe:/my/program*:* { 1; }",
+      "Program\n"
+      " uprobe:/my/program*:*\n"
+      "  int: 1\n");
+  test("uprobe:/my/program*:func { 1; }",
+      "Program\n"
+      " uprobe:/my/program*:func\n"
+      "  int: 1\n");
+  test("uprobe:*my/program*:func { 1; }",
+      "Program\n"
+      " uprobe:*my/program*:func\n"
+      "  int: 1\n");
+  test("uprobe:/my/program*foo:func { 1; }",
+      "Program\n"
+      " uprobe:/my/program*foo:func\n"
+      "  int: 1\n");
+  test("usdt:/my/program*:* { 1; }",
+      "Program\n"
+      " usdt:/my/program*:*\n"
+      "  int: 1\n");
+  test("usdt:/my/program*:func { 1; }",
+      "Program\n"
+      " usdt:/my/program*:func\n"
+      "  int: 1\n");
+  test("usdt:*my/program*:func { 1; }",
+      "Program\n"
+      " usdt:*my/program*:func\n"
+      "  int: 1\n");
+  test("usdt:/my/program*foo:func { 1; }",
+      "Program\n"
+      " usdt:/my/program*foo:func\n"
+      "  int: 1\n");
+  // Make sure calls or builtins don't cause issues
+  test("usdt:/my/program*avg:func { 1; }",
+       "Program\n"
+       " usdt:/my/program*avg:func\n"
+       "  int: 1\n");
+  test("usdt:/my/program*nsecs:func { 1; }",
+       "Program\n"
+       " usdt:/my/program*nsecs:func\n"
+       "  int: 1\n");
+}
+
+TEST(Parser, wildcard_func)
+{
+  test("usdt:/my/program:abc*cd { 1; }",
+       "Program\n"
+       " usdt:/my/program:abc*cd\n"
+       "  int: 1\n");
+  test("usdt:/my/program:abc*c*d { 1; }",
+       "Program\n"
+       " usdt:/my/program:abc*c*d\n"
+       "  int: 1\n");
+
+  std::string keywords[] = {
+    "arg0", "args", "curtask", "func", "gid" "rand", "uid",
+    "avg", "cat", "exit", "kaddr", "min", "printf", "usym",
+    "kstack", "ustack", "bpftrace", "perf", "uprobe", "kprobe",
+  };
+  for(auto kw : keywords)
+  {
+    test("usdt:/my/program:"+ kw +"*c*d { 1; }",
+         "Program\n"
+         " usdt:/my/program:"+ kw + "*c*d\n"
+         "  int: 1\n");
+    test("usdt:/my/program:abc*"+ kw +"*c*d { 1; }",
+         "Program\n"
+         " usdt:/my/program:abc*"+ kw + "*c*d\n"
+         "  int: 1\n");
+  }
 }
 
 TEST(Parser, short_map_name)
@@ -777,6 +1184,25 @@ TEST(Parser, field_access_builtin)
       "   count\n");
 }
 
+TEST(Parser, array_access)
+{
+  test("kprobe:sys_read { x[index]; }",
+      "Program\n"
+      " kprobe:sys_read\n"
+      "  []\n"
+      "   identifier: x\n"
+      "   identifier: index\n");
+
+  test("kprobe:sys_read { $val = x[index]; }",
+      "Program\n"
+      " kprobe:sys_read\n"
+      "  =\n"
+      "   variable: $val\n"
+      "   []\n"
+      "    identifier: x\n"
+      "    identifier: index\n");
+}
+
 TEST(Parser, cstruct)
 {
   test("struct Foo { int x, y; char *str; } kprobe:sys_read { 1; }",
@@ -797,12 +1223,77 @@ TEST(Parser, cstruct_nested)
       "  int: 1\n");
 }
 
+TEST(Parser, unexpected_symbol)
+{
+  BPFtrace bpftrace;
+  std::stringstream out;
+  Driver driver(bpftrace, out);
+  EXPECT_EQ(driver.parse_str("i:s:1 { < }"), 1);
+  std::string expected =
+      R"(stdin:1:9-10: ERROR: syntax error, unexpected <, expecting }
+i:s:1 { < }
+        ~
+)";
+  EXPECT_EQ(out.str(), expected);
+}
+
+TEST(Parser, string_with_tab)
+{
+  BPFtrace bpftrace;
+  std::stringstream out;
+  Driver driver(bpftrace, out);
+  EXPECT_EQ(driver.parse_str("i:s:1\t\t\t$a"), 1);
+  std::string expected =
+      R"(stdin:1:9-11: ERROR: syntax error, unexpected variable, expecting {
+i:s:1            $a
+                 ~~
+)";
+  EXPECT_EQ(out.str(), expected);
+}
+
 TEST(Parser, unterminated_string)
 {
-  // Make sure parser doesn't get stuck in an infinite loop
-  Driver driver;
+  BPFtrace bpftrace;
+  std::stringstream out;
+  Driver driver(bpftrace, out);
   EXPECT_EQ(driver.parse_str("kprobe:f { \"asdf }"), 1);
+  std::string expected =
+      R"(stdin:1:12-19: ERROR: unterminated string
+kprobe:f { "asdf }
+           ~~~~~~~
+stdin:1:12-19: ERROR: syntax error, unexpected end of file, expecting }
+kprobe:f { "asdf }
+           ~~~~~~~
+)";
+  EXPECT_EQ(out.str(), expected);
 }
+
+TEST(Parser, uprobe_offset)
+{
+  test("u:./test:fn+1 {}",
+       "Program\n"
+       " uprobe:./test:fn+1\n");
+  test("u:./test:fn+0x10 {}",
+       "Program\n"
+       " uprobe:./test:fn+16\n");
+
+  test("u:./test:\"fn.abc\"+1 {}",
+       "Program\n"
+       " uprobe:./test:fn.abc+1\n");
+  test("u:./test:\"fn.abc\"+0x10 {}",
+       "Program\n"
+       " uprobe:./test:fn.abc+16\n");
+}
+
+TEST(Parser, invalid_increment_decrement)
+{
+  test_parse_failure("i:s:1 { @=5++}");
+  test_parse_failure("i:s:1 { @=++5}");
+  test_parse_failure("i:s:1 { @=5--}");
+  test_parse_failure("i:s:1 { @=--5}");
+  test_parse_failure("i:s:1 { @=\"a\"++}");
+}
+
 
 } // namespace parser
 } // namespace test

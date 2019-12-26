@@ -1,3 +1,5 @@
+#include <cctype>
+#include <iomanip>
 #include <regex>
 
 #include "printer.h"
@@ -12,23 +14,73 @@ void Printer::visit(Integer &integer)
   out_ << indent << "int: " << integer.n << std::endl;
 }
 
-void Printer::visit(String &string)
+void Printer::visit(PositionalParameter &param)
 {
   std::string indent(depth_, ' ');
 
-  std::string str = string.str;
-  str = std::regex_replace(str, std::regex("\\\\"), "\\\\");
-  str = std::regex_replace(str, std::regex("\n"), "\\n");
-  str = std::regex_replace(str, std::regex("\t"), "\\t");
-  str = std::regex_replace(str, std::regex("\""), "\\\"");
+  switch (param.ptype) {
+    case PositionalParameterType::positional:
+      out_ << indent << "param: $" << param.n << std::endl;
+      break;
+    case PositionalParameterType::count:
+      out_ << indent << "param: $#" << std::endl;
+      break;
+    default:
+      break;
+  }
+}
 
-  out_ << indent << "string: " << str << std::endl;
+void Printer::visit(String &string)
+{
+  std::string indent(depth_, ' ');
+  std::stringstream ss;
+
+  for (char c: string.str)
+  {
+    // the argument of isprint() must be an unsigned char or EOF
+    int code = static_cast<unsigned char>(c);
+    if (std::isprint(code))
+    {
+      if (c == '\\')
+        ss << "\\\\";
+      else if (c == '"')
+        ss << "\\\"";
+      else
+        ss << c;
+    }
+    else
+    {
+      if (c == '\n')
+        ss << "\\n";
+      else if (c == '\t')
+        ss << "\\t";
+      else if (c == '\r')
+        ss << "\\r";
+      else
+        ss << "\\x" << std::setfill('0') << std::setw(2)
+           << std::hex << code;
+    }
+  }
+
+  out_ << indent << "string: " << ss.str() << std::endl;
+}
+
+void Printer::visit(StackMode &mode)
+{
+  std::string indent(depth_, ' ');
+  out_ << indent << "stack_mode: " << mode.mode << std::endl;
 }
 
 void Printer::visit(Builtin &builtin)
 {
   std::string indent(depth_, ' ');
   out_ << indent << "builtin: " << builtin.ident << std::endl;
+}
+
+void Printer::visit(Identifier &identifier)
+{
+  std::string indent(depth_, ' ');
+  out_ << indent << "identifier: " << identifier.ident << std::endl;
 }
 
 void Printer::visit(Call &call)
@@ -78,12 +130,23 @@ void Printer::visit(Binop &binop)
 
 void Printer::visit(Unop &unop)
 {
-  std::string indent(depth_, ' ');
-  out_ << indent << opstr(unop) << std::endl;
+  if (!unop.is_post_op)
+  {
+    std::string indent(depth_, ' ');
+    out_ << indent << opstr(unop) << std::endl;
 
-  ++depth_;
-  unop.expr->accept(*this);
-  --depth_;
+    ++depth_;
+    unop.expr->accept(*this);
+    --depth_;
+  }
+
+  if (unop.is_post_op)
+  {
+    std::string indent(depth_+1, ' ');
+
+    unop.expr->accept(*this);
+    out_ << indent << opstr(unop) << std::endl;
+  }
 }
 
 void Printer::visit(Ternary &ternary)
@@ -108,6 +171,17 @@ void Printer::visit(FieldAccess &acc)
   --depth_;
 
   out_ << indent << " " << acc.field << std::endl;
+}
+
+void Printer::visit(ArrayAccess &arr)
+{
+  std::string indent(depth_, ' ');
+  out_ << indent << "[]" << std::endl;
+
+  ++depth_;
+  arr.expr->accept(*this);
+  arr.indexpr->accept(*this);
+  --depth_;
 }
 
 void Printer::visit(Cast &cast)

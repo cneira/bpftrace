@@ -1,4 +1,4 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/env bpftrace
 /*
  * loads	Prints load averages.
  *		For Linux, uses bpftrace and eBPF.
@@ -20,7 +20,6 @@
 BEGIN
 {
 	printf("Reading load averages... Hit Ctrl-C to end.\n");
-
 }
 
 interval:s:1

@@ -1,4 +1,4 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/env bpftrace
 /*
  * opensnoop	Trace open() syscalls.
  *		For Linux, uses bpftrace and eBPF.
@@ -21,12 +21,14 @@ BEGIN
 	printf("%-6s %-16s %4s %3s %s\n", "PID", "COMM", "FD", "ERR", "PATH");
 }
 
-tracepoint:syscalls:sys_enter_open
+tracepoint:syscalls:sys_enter_open,
+tracepoint:syscalls:sys_enter_openat
 {
 	@filename[tid] = args->filename;
 }
 
-tracepoint:syscalls:sys_exit_open
+tracepoint:syscalls:sys_exit_open,
+tracepoint:syscalls:sys_exit_openat
 /@filename[tid]/
 {
 	$ret = args->ret;
@@ -36,4 +38,9 @@ tracepoint:syscalls:sys_exit_open
 	printf("%-6d %-16s %4d %3d %s\n", pid, comm, $fd, $errno,
 	    str(@filename[tid]));
 	delete(@filename[tid]);
+}
+
+END
+{
+	clear(@filename);
 }

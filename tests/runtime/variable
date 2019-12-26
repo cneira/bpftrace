@@ -1,0 +1,42 @@
+NAME global_int
+RUN bpftrace -v -e 'i:ms:1 {@a = 10; printf("%d\n", @a); exit();}'
+EXPECT \@a: 10
+TIMEOUT 5
+
+NAME global_string
+RUN bpftrace -v -e 'i:ms:1 {@a = "hi"; printf("%s\\n", @a); exit();}'
+EXPECT @a: hi
+TIMEOUT 5
+
+NAME local_int
+RUN bpftrace -v -e 'i:ms:1  {$a = 10; printf("a=%d\n", $a); exit();}'
+EXPECT a=10
+TIMEOUT 5
+
+NAME local_string
+RUN bpftrace -v -e 'i:ms:1  {$a = "hi"; printf("a=%s\n", $a); exit();}'
+EXPECT a=hi
+TIMEOUT 5
+
+NAME global_associative_arrays
+RUN bpftrace -v -e 'k:vfs_read { @start[tid] = nsecs; } kretprobe:vfs_read /@start[tid] != 0/ { printf("slept for %d ms\n", (nsecs - @start[tid]) / 1000000); delete(@start[tid]); exit();}'
+EXPECT slept for [0-9]+ ms
+TIMEOUT 5
+AFTER cat /dev/null
+
+NAME scratch
+RUN bpftrace -v -e 'k:vfs_read { @start[tid] = nsecs; } kretprobe:vfs_read /@start[tid] != 0/ { $delta = nsecs - @start[tid]; printf("slept for %d ms\n", $delta / 1000000); delete(@start[tid]); exit(); }'
+EXPECT slept for [0-9]* ms
+TIMEOUT 5
+AFTER cat /dev/null
+
+NAME 32-bit tracepoint arg
+RUN bpftrace -v -e 'tracepoint:random:random_read { $i = args->got_bits; printf("bits: %d\n", $i); if ($i == 24) { exit() } }'
+EXPECT bits: 24
+TIMEOUT 5
+AFTER dd if=/dev/random bs=3 count=1
+
+NAME tracepoint arg casts in predicates
+RUN bpftrace -v -e 'tracepoint:syscalls:sys_enter_wait4 /args->ru/ { @ru[tid] = args->ru; } tracepoint:syscalls:sys_exit_wait4 /@ru[tid]/ { @++; exit(); }' -c ./testprogs/wait4_ru
+EXPECT @: 1
+TIMEOUT 5
